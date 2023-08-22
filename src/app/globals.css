@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+ /* Style for the thumb of the range input */
+ input[type="range"]::-webkit-slider-thumb {
+  width: 15px;
+  height: 15px;
+  background-color: white;
+  border: 2px solid #fff;
+  border-radius: 20%;
+  cursor: pointer;
+  -webkit-appearance: none;
+  margin-top: calc((var(15px) - 2px) / -2); /* Adjust the margin to center the thumb */
+}
+
 /* :root {
   --foreground-rgb: 0, 0, 0;
   --background-start-rgb: 214, 219, 220;

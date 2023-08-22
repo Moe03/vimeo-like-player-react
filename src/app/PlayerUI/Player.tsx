@@ -1,5 +1,4 @@
 /** @format */
-
 "use client";
 
 import React, {
@@ -12,31 +11,12 @@ import {
   AnimatePresence,
   motion,
 } from 'framer-motion';
-import Image from 'next/image';
-import {
-  BiSolidVolumeMute,
-  BiVolumeFull,
-} from 'react-icons/bi';
-import {
-  BsFillPlayFill,
-  BsPauseFill,
-  BsSkipBackwardFill,
-} from 'react-icons/bs';
-import {
-  MdFullscreen,
-  MdOutlineHighQuality,
-  MdOutlineSpeed,
-} from 'react-icons/md';
-import {
-  TbPlayerTrackNext,
-  TbSettingsFilled,
-} from 'react-icons/tb';
 
-import {
-  Button,
-  Spinner,
-} from '@nextui-org/react';
-
+import PlayerFloatMenu from './PlayerFloatMenu';
+import PlayerLoading from './PlayerLoading';
+import PlayerOptionsButtons from './PlayerOptionsButtons';
+import PlayerPausedOverlay from './PlayerPausedOverlay';
+import PlayerSeeker from './PlayerSeeker';
 import PlayPauseButton from './PlayPauseButton';
 
 export interface PlayerProps {
@@ -46,59 +26,59 @@ export interface PlayerProps {
 	settings?: object;
 }
 
+export interface PlayerChild {
+	setPlayerState: any;
+	playerState: any;
+	handlePlayerAction: (arg0: PlayerActions, arg2?: any) => void;
+}
+
+export type PlayerActions =
+	| "play-pause"
+	| "time-update"
+	| "speed-change"
+	| "seek-change"
+	| "seek-start"
+	| "seek-end"
+	| "toggle-fullscreen"
+	| "change-video"
+	| "toggle-mute";
+
 const Player = (props: PlayerProps) => {
-
-	const [isPlaying, setIsPlaying] = useState(false);
-	const [progress, setProgress] = useState(0);
-	const [seekValue, setSeekValue] = useState(0);
-	const [isSeeking, setIsSeeking] = useState(false);
-	const [videoSpeed, setVideoSpeed] = useState(1);
-	const [isMuted, setIsMuted] = useState(false);
-	const [isFullscreen, setIsFullscreen] = useState(false);
-	const [isVideoLoaded, setIsVideoLoaded] = useState(false);
-	const [hasInitialized, setHasInit] = useState(false);
-
-	const [controller, setController] = useState({
-		active: true,
-	});
-
-	const [floatMenu, setFloat] = useState({
-		active: false,
-		menu: ``,
-		nested: ``,
-	});
+	const srcUrl = `${props.src}`;
 
 	const progressTimeout = useRef<any>(null);
 	const containerRef = useRef<any>(null);
 	const videoRef = useRef<any>(null);
 
-	const srcUrl = `${props.src}`;
+	const [playerState, setPlayerState] = useState({
+		isPlaying: false,
+		progress: 0,
+		seekValue: 0,
+		isSeeking: false,
+		videoSpeed: 1,
+		isMuted: false,
+		isFullscreen: false,
+		isVideoLoaded: false,
+		hasInitialized: false,
+		controller: { active: false },
+		floatMenu: {
+			active: false,
+			menu: "",
+			nested: "",
+		},
+	});
 
 	const resetAll = () => {
-		setHasInit(false);
-		setIsPlaying(false);
-		setIsSeeking(false);
-		setSeekValue(0);
-		setProgress(0);
-		setIsVideoLoaded(false);
+		setPlayerState((prev) => ({
+			...prev,
+			hasInitialized: false,
+			isPlaying: false,
+			isSeeking: false,
+			seekValue: 0,
+			progress: 0,
+			isVideoLoaded: false,
+		}));
 	};
-
-	React.useEffect(() => {
-		const videoElement = videoRef.current;
-
-		if (videoElement) {
-			resetAll();
-			videoElement.src = srcUrl;
-		}
-	}, [srcUrl]);
-
-	useEffect(() => {
-		if (isSeeking) {
-			const videoElement = videoRef.current;
-			const seekTime = (seekValue / 100) * videoElement.duration;
-			videoElement.currentTime = seekTime || 0;
-		}
-	}, [isSeeking, seekValue]);
 
 	useEffect(() => {
 		const resizeHandler = () => {
@@ -118,19 +98,35 @@ const Player = (props: PlayerProps) => {
 		};
 	}, []);
 
+	React.useEffect(() => {
+		const videoElement = videoRef.current;
+		if (videoElement) {
+			resetAll();
+			videoElement.src = srcUrl;
+		}
+	}, [srcUrl]);
+
+	useEffect(() => {
+		if (playerState.isSeeking) {
+			const videoElement = videoRef.current;
+			const seekTime = (playerState.seekValue / 100) * videoElement.duration;
+			videoElement.currentTime = seekTime || 0;
+		}
+	}, [playerState.isSeeking, playerState.seekValue]);
+
 	useEffect(() => {
 		const videoElement = videoRef.current;
 
 		const handleCanPlay = () => {
-			setIsVideoLoaded(true);
-			if (isSeeking) {
+			setPlayerState((prev) => ({ ...prev, isVideoLoaded: true }));
+			if (playerState.isSeeking) {
 				videoElement.play(); // Start playing the video if seeking
 			}
 		};
 
 		const handleLoadStart = () => {
-			if (isPlaying) {
-				setIsVideoLoaded(false);
+			if (playerState.isPlaying) {
+				setPlayerState((prev) => ({ ...prev, isVideoLoaded: false }));
 			}
 		};
 
@@ -155,14 +151,14 @@ const Player = (props: PlayerProps) => {
 		if (videoElement) {
 			if (videoElement.paused) {
 				videoElement.play();
-				setIsPlaying(true);
+				setPlayerState((prev) => ({ ...prev, isPlaying: true }));
 			} else {
 				videoElement.pause();
-				setIsPlaying(false);
+				setPlayerState((prev) => ({ ...prev, isPlaying: false }));
 			}
 		}
-		if (!hasInitialized) {
-			setHasInit(true);
+		if (!playerState.hasInitialized) {
+			setPlayerState((prev) => ({ ...prev, hasInitialized: true }));
 		}
 	};
 
@@ -173,19 +169,21 @@ const Player = (props: PlayerProps) => {
 			const { currentTime, duration } = videoElement;
 			const newProgress = (currentTime / duration) * 100;
 
-			if (!isSeeking) {
-				setProgress(newProgress);
-				setSeekValue(newProgress);
-			}
+			// if (playerState.isSeeking) {
+			setPlayerState((prev) => ({
+				...prev,
+				progress: newProgress,
+				seekValue: newProgress,
+			}));
 		}
 	};
 
 	const handleSeekStart = () => {
-		setIsSeeking(true);
+		setPlayerState((prev) => ({ ...prev, isSeeking: true }));
 	};
 
 	const handleSeekEnd = () => {
-		setIsSeeking(false);
+		setPlayerState((prev) => ({ ...prev, isSeeking: false }));
 
 		if (progressTimeout.current) {
 			clearTimeout(progressTimeout.current);
@@ -195,21 +193,26 @@ const Player = (props: PlayerProps) => {
 			const videoElement = videoRef.current;
 			const { currentTime, duration } = videoElement;
 			const newProgress = (currentTime / duration) * 100;
-			setProgress(newProgress);
+			setPlayerState((prev) => ({ ...prev, progress: newProgress }));
 			progressTimeout.current = null;
 		}, 500);
 	};
 
 	const handleSeekChange = (e: any) => {
-		setSeekValue(Number(e.target.value));
-		setProgress(Number(e.target.value));
+		setPlayerState((prev) => ({
+			...prev,
+			seekValue: Number(e.target.value),
+			progress: Number(e.target.value),
+		}));
 	};
 
-	const handleSpeedChange = (speed: any) => {
-		setVideoSpeed(speed);
-		const videoElement = videoRef.current;
-		if (videoElement) {
-			videoElement.playbackRate = speed;
+	const handleSpeedChange = (speed: number) => {
+		if (speed) {
+			setPlayerState((prev) => ({ ...prev, videoSpeed: speed }));
+			const videoElement = videoRef.current;
+			if (videoElement) {
+				videoElement.playbackRate = speed;
+			}
 		}
 	};
 
@@ -217,15 +220,15 @@ const Player = (props: PlayerProps) => {
 		const videoElement = videoRef.current;
 		if (videoElement) {
 			videoElement.muted = !videoElement.muted;
-			setIsMuted(videoElement.muted);
+			setPlayerState((prev) => ({ ...prev, isMuted: videoElement.muted }));
 		}
 	};
 
 	const handleChangeVideo = (target: string) => {
 		if (target === "prev") {
-			// change to previous video in playlist
+			// change src to previous video in playlist
 		} else if (target === "next") {
-			// change to next video
+			// change src to next video
 		}
 	};
 
@@ -241,236 +244,126 @@ const Player = (props: PlayerProps) => {
 			} else if (videoElement.msRequestFullscreen) {
 				videoElement.msRequestFullscreen();
 			}
-			setIsFullscreen(true);
+			setPlayerState((prev) => ({ ...prev, isFullscreen: true }));
 		}
 	};
 
-	const playbackRates = props.playbackRates || [
-		0.5, 0.75, 1, 1.25, 1.5, 1.75, 2,
-	];
+	const handlePlayerAction = (action: PlayerActions, payload?: any | null) => {
+		switch (action) {
+			case "play-pause":
+				handlePlayPause();
+				break;
+			case "time-update":
+				handleTimeUpdate();
+			case "speed-change":
+				handleSpeedChange(payload);
+				break;
+			case "seek-change":
+				handleSeekChange(payload);
+				break;
+			case "seek-start":
+				handleSeekStart();
+				break;
+			case "seek-end":
+				handleSeekEnd();
+				break;
+			case "toggle-fullscreen":
+				handleToggleFullscreen();
+				break;
+			case "toggle-mute":
+				handleToggleMute();
+				break;
+			case "change-video":
+				handleChangeVideo(payload);
+				break;
+			default:
+				console.log("It's a weekend :)");
+				break;
+		}
+	};
 
 	return (
 		<div
 			onMouseEnter={() => {
-				setFloat((prev) => ({
+				setPlayerState((prev) => ({
 					...prev,
-					active: prev.active,
-					nested: prev.nested,
+					floatMenu: {
+						...prev.floatMenu,
+						active: prev.floatMenu.active,
+						nested: prev.floatMenu.nested,
+					},
+					controller: { ...prev.controller, active: true },
 				}));
-				setController((prev) => ({ ...prev, active: true }));
 			}}
 			onMouseLeave={() => {
-				setFloat((prev) => ({ ...prev, active: false, nested: `` }));
-				setController((prev) => ({ ...prev, active: false }));
+				setPlayerState((prev) => ({
+					...prev,
+					floatMenu: {
+						...prev.floatMenu,
+						active: false,
+						nested: "",
+					},
+					controller: { ...prev.controller, active: false },
+				}));
 			}}
 			className="relative h-full w-full"
 			ref={containerRef}>
 			<video
-				onClick={handlePlayPause}
+				onClick={() => handlePlayerAction("play-pause")}
 				playsInline
 				ref={videoRef}
 				className="w-full h-full bg-black"
-				onTimeUpdate={handleTimeUpdate}
+				onTimeUpdate={(e) => handlePlayerAction("time-update")}
 			/>
 			<AnimatePresence>
+				{/* VIDEO LOADING */}
+				{!playerState.isVideoLoaded && !playerState.hasInitialized && (
+					<PlayerLoading />
+				)}
 				{/* VIDEO IS PAUSED */}
-				{(!hasInitialized && props.thumbnailURL) ||
-					(!isPlaying && (
-						<motion.div
-							key={`video_paused`}
-							initial={{ opacity: "0%" }}
-							animate={{ opacity: "100%" }}
-							exit={{ opacity: "0%" }}
-							transition={{
-								type: "spring",
-								stiffness: 500,
-								damping: 30,
-								mass: 0.5,
-							}}
-							className="bg-black/20 backdrop-blur flex justify-center items-center  w-full h-full absolute z-20 bottom-0 left-0 gap-5">
-							<Button
-								size={`lg`}
-								variant={`ghost`}
-								isIconOnly
-								className="px-2 py-2 rounded  text-white  z-20  "
-								color="primary"
-								onPress={() => handleChangeVideo(`prev`)}>
-								<BsSkipBackwardFill className="w-6 h-6" />
-							</Button>
-							<Button
-								size={`lg`}
-								variant="shadow"
-								isIconOnly
-								className="px-2 py-2 rounded  text-white  z-20  "
-								color="primary"
-								onPress={handlePlayPause}>
-								{isPlaying ? (
-									<BsPauseFill className="w-6 h-6" />
-								) : (
-									<BsFillPlayFill className="w-6 h-6" />
-								)}
-							</Button>
-							<Button
-								size={`lg`}
-								variant={`ghost`}
-								isIconOnly
-								className="px-2 py-2 rounded  text-white  z-20  "
-								color="primary"
-								onPress={() => handleChangeVideo("next")}>
-								<TbPlayerTrackNext className="w-6 h-6" />
-							</Button>
-
-							<Image layout="fill" src={props.thumbnailURL || ""} alt={""} />
-						</motion.div>
-					))}
-
-				{/* VIDEO LOADED AND PLAYING */}
-				{!isVideoLoaded && hasInitialized && (
-					<motion.div
-						key={`video_playing`}
-						initial={{ opacity: 0, scale: 0.9, right: `2.5%` }}
-						animate={{ opacity: 1, scale: 1, right: `2.5%` }}
-						exit={{ opacity: 0, scale: 0.9, right: `2.5%` }}
-						transition={{
-							type: "spring",
-							stiffness: 500,
-							damping: 30,
-							mass: 0.5,
-						}}
-						className="bg-transparent flex-all-center  w-full h-full absolute z-20 bottom-0">
-						<div className="flex-all-center rounded-full  p-2">
-							<Spinner color="primary" />
-						</div>
-					</motion.div>
-				)}
-				{/* SHOWING FLOAT MENU WHEN PRESSING SETTINGS */}
-				{floatMenu.active && (
-					<motion.div
-						key={`video_settings_float`}
-						initial={{ opacity: 0, scale: 0.9, right: `2.5%` }}
-						animate={{ opacity: 1, scale: 1, right: `2.5%` }}
-						exit={{ opacity: 0, scale: 0.9, right: `2.5%` }}
-						transition={{
-							type: "spring",
-							stiffness: 500,
-							damping: 30,
-							mass: 0.5,
-						}}
-						className={`absolute bottom-14  w-48 h-[70%] bg-black/50 backdrop-blur text-white  flex flex-col items-center gap-2 rounded-lg py-4 px-2`}>
-						{floatMenu.nested === `speed` && (
-							<div className="grid grid-cols-2 gap-1">
-								{playbackRates.map((rate) => (
-									<Button
-										size="md"
-										className="bg-black text-white w-full flex items-center justify-between mx-0 text-center"
-										onPress={() => {
-											handleSpeedChange(rate);
-											setFloat((prev) => ({ ...prev, nested: "" }));
-										}}>
-										{rate}x
-									</Button>
-								))}
-							</div>
-						)}
-						{!floatMenu.nested && (
-							<>
-								<Button
-									size="sm"
-									isDisabled
-									className="bg-black text-white w-full flex items-center justify-between ">
-									<div className="flex items-center">
-										<MdOutlineHighQuality className="w-5 h-5 mr-1 " />
-										<span>Quality</span>
-									</div>
-									<div>
-										{/* Video quality here */}
-										<span className="text-xs">Original</span>
-										<span></span>
-									</div>
-								</Button>
-								<Button
-									size="sm"
-									onPress={() =>
-										setFloat((prev) => ({ ...prev, nested: `speed` }))
-									}
-									className="bg-black text-white w-full flex items-center justify-between mx-0">
-									<div className="flex items-center">
-										<MdOutlineSpeed className="w-5 h-5 mr-1" />
-										<span>Speed</span>
-									</div>
-									<div>
-										{/* Video speed here, should sync with user perefrences */}
-										<span className="text-xs">{videoSpeed}x</span>
-										<span></span>
-									</div>
-								</Button>
-							</>
-						)}
-					</motion.div>
-				)}
-			</AnimatePresence>
-			<div
-				className={`${
-					controller.active ? `opacity-1` : `opacity-0`
-				} absolute bottom-2 mx-auto left-0 right-0 w-[95%] bg-opacity-70 text-white  flex items-center gap-2 rounded-lg transition-all duration-500`}>
-				<PlayPauseButton isPlaying={isPlaying} handlePlayPause={handlePlayPause} />
-				<div className="bg-black/25 backdrop-blur w-full h-full flex items-center pl-4 rounded-lg py-1">
-					<div className="w-full h-4 bg-black/50 rounded-lg overflow-hidden relative">
-						<input
-							type="range"
-							min={0}
-							max={100}
-							step={0.1}
-							value={seekValue}
-							className="w-full h-full appearance-none cursor-pointer absolute bg-transparent z-20 "
-							onChange={handleSeekChange}
-							onMouseDown={handleSeekStart}
-							onMouseUp={handleSeekEnd}
-							onTouchStart={handleSeekStart}
-							onTouchEnd={handleSeekEnd}
+				{(!playerState.hasInitialized && props.thumbnailURL) ||
+					(!playerState.isPlaying && (
+						<PlayerPausedOverlay
+							playerState={playerState}
+							setPlayerState={setPlayerState}
+							handlePlayerAction={handlePlayerAction}
+							thumbnailURL={props.thumbnailURL}
 						/>
-						<div className="h-full bg-primary/10 absolute w-full">
-							<div
-								className="h-full bg-primary absolute"
-								style={{ width: `${progress}%` }}
-							/>
-						</div>
+					))}
+				{/* SHOWING FLOAT MENU WHEN PRESSING SETTINGS */}
+				{playerState.floatMenu.active && (
+					<PlayerFloatMenu
+						playerState={playerState}
+						setPlayerState={setPlayerState}
+						handlePlayerAction={handlePlayerAction}
+					/>
+				)}
+				{playerState.controller.active && (
+				<motion.div
+					initial={{opacity: 0}}
+					animate={{opacity: 1}}
+					exit={{opacity: 0}}
+					key={'player_bottom_bar'}
+					className={` absolute bottom-2 mx-auto left-0 right-0 w-[95%] backdrop-blur text-white  flex items-center gap-2 rounded-lg`}>
+					<PlayPauseButton
+						isPlaying={playerState.isPlaying}
+						handlePlayPause={() => handlePlayerAction("play-pause")}
+					/>
+					<div className="bg-black/25 w-full h-full flex items-center pl-4 rounded-lg py-1">
+						<PlayerSeeker
+							playerState={playerState}
+							setPlayerState={setPlayerState}
+							handlePlayerAction={handlePlayerAction}
+						/>
+						<PlayerOptionsButtons
+							playerState={playerState}
+							setPlayerState={setPlayerState}
+							handlePlayerAction={handlePlayerAction}
+						/>
 					</div>
-					<div className={`flex`}>
-						<Button
-							onPress={() =>
-								setFloat((prev) => ({
-									...prev,
-									active: !prev.active,
-									menu: "settings",
-								}))
-							}
-							size="sm"
-							isIconOnly
-							className="bg-transparent text-white">
-							<TbSettingsFilled className="w-5 h-5" />
-						</Button>
-						<Button
-							onPress={handleToggleMute}
-							size="sm"
-							isIconOnly
-							className="bg-transparent text-white">
-							{isMuted ? (
-								<BiSolidVolumeMute className="w-5 h-5 " />
-							) : (
-								<BiVolumeFull className="w-5 h-5" />
-							)}
-						</Button>
-						<Button
-							onPress={handleToggleFullscreen}
-							size="sm"
-							isIconOnly
-							className="bg-transparent text-white">
-							<MdFullscreen className="w-5 h-5" />
-						</Button>
-					</div>
-				</div>
-			</div>
+				</motion.div>) }
+				
+			</AnimatePresence>
 		</div>
 	);
 };
